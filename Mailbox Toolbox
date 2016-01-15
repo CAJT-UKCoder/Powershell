@@ -1,0 +1,991 @@
+#  *** THIS SCRIPT IS PROVIDED WITHOUT WARRANTY ***
+#
+# Author: RedditUKCoder
+#
+# This script will bring up menu options to work on accesses for inboxes
+#------------------------------------------------------------------------------
+Function Disconnect-ExchangeOnline {Get-PSSession | Where-Object {$_.ConfigurationName -eq "Microsoft.Exchange"} | Remove-PSSession}
+function Validate-UserSelection
+{
+    Param(
+        $AllowedAnswers,
+        $ErrorMessage,
+        $Selection
+    )
+    foreach($str in $AllowedAnswers.ToString().Split(","))
+    {
+        if($str -eq $Selection)
+        {
+            return $true
+        }
+    }
+    Write-Host $ErrorMessage -ForegroundColor Red -BackgroundColor Black
+    return $false
+}
+function Format-BytesInKiloBytes 
+{
+    param(
+        $bytes
+    )
+    "{0:N0}" -f ($bytes/1000)
+}
+Function Set-AlternatingRows {
+       <#
+       
+       #>
+    [CmdletBinding()]
+       Param(
+             [Parameter(Mandatory=$True,ValueFromPipeline=$True)]
+        [string]$Line,
+       
+           [Parameter(Mandatory=$True)]
+             [string]$CSSEvenClass,
+       
+        [Parameter(Mandatory=$True)]
+           [string]$CSSOddClass
+       )
+       Begin {
+             $ClassName = $CSSEvenClass
+       }
+       Process {
+             If ($Line.Contains("<tr>"))
+             {      $Line = $Line.Replace("<tr>","<tr class=""$ClassName"">")
+                    If ($ClassName -eq $CSSEvenClass)
+                    {      $ClassName = $CSSOddClass
+                    }
+                    Else
+                    {      $ClassName = $CSSEvenClass
+                    }
+             }
+             Return $Line
+       }
+}
+$FormatEnumerationLimit = -1
+#------------------------------------------------------------------------------
+# PowerShell console window Style
+#------------------------------------------------------------------------------
+$pshost = get-host
+$pswindow = $pshost.ui.rawui
+	$newsize = $pswindow.buffersize
+		if($newsize.height){
+		$newsize.height = 3000
+		$newsize.width = 150
+		$pswindow.buffersize = $newsize
+	}
+
+	$newsize = $pswindow.windowsize
+	if($newsize.height){
+		$newsize.height = 50
+		$newsize.width = 150
+		$pswindow.windowsize = $newsize
+	}
+#------------------------------------------------------------------------------
+# HTML Style start 
+#------------------------------------------------------------------------------
+$Header = @"
+<style>
+Body{font-family:segoe ui,arial;color:black; }
+H1{ color: white; background-color:#1F4E79; font-weight:bold;width: 70%;margin-top:35px;margin-bottom:25px;font-size: 22px;padding:5px 15px 5px 10px; }
+TABLE {border-width: 1px;border-style: solid;border-color: black;border-collapse: collapse;}
+TH {border-width: 1px;padding: 5px;border-style: solid;border-color: #d1d3d4;background-color:#0072c6 ;color:white;}
+TD {border-width: 1px;padding: 3px;border-style: solid;border-color: black;}
+.odd  { background-color:#ffffff; }
+.even { background-color:#dddddd; }
+</style>
+"@
+#------------------------------------------------------------------------------
+# HTML Style END
+#------------------------------------------------------------------------------
+$Loop = $true
+While ($Loop)
+{
+    write-host 
+    write-host ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    write-host   "Mailbox Permissions | PowerShell Script menu - Created by Carl Taylor"  
+    write-host ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    write-host
+    write-host -ForegroundColor green  '---------------------------' 
+    write-host -ForegroundColor white  -BackgroundColor Blue 'Section A: Assign Permissions to Mailbox  ' 
+    write-host -ForegroundColor green  '---------------------------' 
+    write-host
+    write-host                                              ' 1)   Assign "FULL ACCESS" Permissions for a Mailbox'
+	write-host 
+	write-host                                              ' 2)   Assign "SEND AS" Permissions for a Mailbox'
+	write-host 
+	write-host                                              ' 3)   Assign "SEND ON BEHALF" Permissions for a Mailbox'
+	write-host -ForegroundColor green  '--------------------------------------------------------------' 
+	write-host 
+	write-host                                              ' 4)   Assign "FULL ACCESS + SEND AS" Permissions for a Mailbox'
+	write-host 
+	write-host                                              ' 5)   Assign "FULL ACCESS" Permissions to Distribution Group + Automapping'
+	write-host 
+	write-host -ForegroundColor green  '---------------------------' 
+    write-host -ForegroundColor white  -BackgroundColor Blue 'Section B: Assign Permissions BULK Mode  ' 
+    write-host -ForegroundColor green  '---------------------------' 
+    write-host
+    write-host                                              ' 6)   Assign "FULL ACCESS" Permissions for all Mailboxes - no AutoMap (BULK Mode)'
+	write-host 
+	write-host                                              ' 7)   Assign "SEND AS" Permissions for all Mailboxes (BULK Mode)'
+	write-host -ForegroundColor green  '---------------------------' 
+    write-host -ForegroundColor white  -BackgroundColor Blue 'Section C: Display Permissions  ' 
+    write-host -ForegroundColor green  '---------------------------' 
+    write-host
+    write-host                                              ' 8)  Display  "FULL ACCESS" Permissions for Mailbox'
+	write-host 
+	write-host                                              ' 9)  Display  "SEND ON BEHALF" Permissions for Mailbox'
+	write-host 
+	write-host                                              ' 10) Display all "SEND AS" permissions youve configured in your organization'   
+	write-host -ForegroundColor green  '---------------------------' 
+    write-host -ForegroundColor white  -BackgroundColor Blue ' Section E: Revoke Permissions  ' 
+    write-host -ForegroundColor green  '---------------------------' 
+    write-host
+    write-host                                              ' 11)  Revoke "FULL ACCESS" Permissions'
+	write-host 
+	write-host                                              ' 12)  Revoke "SEND AS" Permissions'
+	write-host 
+	write-host -ForegroundColor green  '---------------------------' 
+    write-host -ForegroundColor Blue  -BackgroundColor Yellow ' Exit\Disconnect ' 
+    write-host -ForegroundColor green  '---------------------------' 
+    write-host
+    write-host  -ForegroundColor Yellow                       ' 13)  Disconnect PowerShell session'
+	write-host 
+	write-host  -ForegroundColor Yellow                       ' 14)  Exit'
+	write-host 
+	write-host                                          
+    $opt = Read-Host "Select an option [0-14]"
+    write-host $opt
+    switch ($opt) 
+{
+		#+++++++++++++++++++++++++++++++++++++++++++++++++
+		# Section A: Assign Permissions to Mailbox
+		#+++++++++++++++++++++++++++++++++++++++++++++++++
+		1
+		{
+			#####################################################################
+			# Assign "FULL ACCESS" Permissions for a Mailbox 
+			#####################################################################
+			# Section 1: information 
+				clear-host
+				write-host
+				write-host
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                            
+				write-host  -ForegroundColor white		Introduction                                                                                          
+				write-host  -ForegroundColor white		--------------------------------------------------------------------------------------                                                              
+				write-host  -ForegroundColor white  	'In the following section we will: '
+				write-host  -ForegroundColor white  	'Assign FULL Access Permissions for a specific Mailbox.'
+				write-host  -ForegroundColor white  	'For example: Assign permission to assistant "(User B)" that needs permission to'   
+				write-host  -ForegroundColor white  	'Access the manager Mailbox "(User A)" .'
+				write-host  -ForegroundColor white  	'The first Variable is the Mailbox name for which we wish to give permission. '
+				write-host  -ForegroundColor white  	'The Second Variable is the User'
+				write-host  -ForegroundColor white  	'That will get the permission for the Mailbox.'
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                          
+				write-host
+				# Section 0: decision 
+				write-host  -ForegroundColor white		Choose the required option                                                                                          
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------    
+				$decision = Read-Host "Choose the required option by entering the letter of your choice   
+				 `n[A]  Assign FULL ACCESS Permissions for a Mailbox 
+				 `n[B]  Assign FULL ACCESS Permissions for a Mailbox - Disable AutoMap  
+				 `n
+				  " 
+				do
+				{
+					$verified = Validate-UserSelection -ErrorMessage "Please choose between A, B or C" -Selection $decision -AllowedAnswers "A,B,C"
+					if(-not($verified))
+					{
+						$decision = Read-Host "Choose the required option by entering the letter of your choice:"
+					}
+				}
+				while(-not($verified))
+				if ($decision -eq "A")
+				{
+					# Section 1: information 
+					write-host  -ForegroundColor white		'information '
+					write-host  -ForegroundColor white		---------------------------------------------------------------------------- 
+					write-host  -ForegroundColor white  	'The following option will Assign FULL Access Permissions for a specific Mailbox.'
+					write-host  -ForegroundColor white		--------------------------------------------------------------------------------------  
+					write-host  -ForegroundColor white  	'The PowerShell command that we use is: '
+					write-host  -ForegroundColor Yellow  	'Add-MailboxPermission <Identity> -User <Identity> -AccessRights FullAccess -InheritanceType all'
+					write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+					write-host
+					write-host	
+					# Section 2: user input	
+					write-host -ForegroundColor white	'User input '
+					write-host -ForegroundColor white	---------------------------------------------------------------------------- 
+					write-host -ForegroundColor Yellow	"You will need to provide 2 parameters:"  
+					write-host
+					write-host -ForegroundColor Yellow	"1. Mailbox name of user that you want to assign Full access permission  "  
+					write-host -ForegroundColor Yellow	"For example:  gomesd@domain.co.uk ( Manager Mailbox )"
+					write-host
+					$MailBox  = Read-Host "Type the Mailbox name of user that you want to assign Full Access permission "
+					write-host
+					write-host
+					write-host -ForegroundColor Yellow	"2. Mailbox name of user that you will be assigned with Full access permission   "  
+					write-host -ForegroundColor Yellow	"For example:  bob@domain.co.uk ( Assistant )"
+					write-host -ForegroundColor Yellow	"NOTE: You can enter multiple addresses and separate with Commas"
+					write-host -ForegroundColor Yellow	"For example:  bob@domain.co.uk, dylan@domain.co.uk )"
+					$AliasArray  = Read-Host "Type the Mailbox name of user that you want to assign Full Access permission "
+					write-host
+							ForEach($Email in $AliasArray.split(","))
+							{					
+					$oldErrorActionPreference = $ErrorActionPreference
+					$ErrorActionPreference = “stop”
+					try{
+						Add-MailboxPermission $MailBox -User $Email -AccessRights FullAccess -InheritanceType all -AutoMapping $False
+					}
+					catch{
+						"hi"
+					}
+					finally{
+						Write-Host "Setting back the old error action preference"
+						$ErrorActionPreference = $oldErrorActionPreference
+					}
+					# Section 4:  Indication 
+					write-host
+					write-host 
+								if ($lastexitcode -eq 1)
+								{
+									write-host "The command Failed :-(" -ForegroundColor red
+								}
+								else
+								{
+									write-host -------------------------------------------------------------
+									write-host -ForegroundColor Yellow	"The command complete successfully !" 
+									write-host -ForegroundColor Yellow	"The following User"
+									write-host -ForegroundColor Magenta	$AliasArray.ToUpper() 
+									write-host -ForegroundColor Yellow	"Have FULL ACCESS Permissions on "	
+									write-host -ForegroundColor Magenta	$MailBox.ToUpper()
+									write-host -ForegroundColor Yellow	"Mailbox" 
+									write-host -------------------------------------------------------------
+								}
+					#———— End of Indication ———————
+					#Section 3: Display Information
+					write-host ---------------------------------------------------------
+					write-host -ForegroundColor Yellow List of User that have FULL ACCESS permissions for $MailBox MailBox 
+					write-host ---------------------------------------------------------
+
+					Get-mailboxpermission $MailBox | Where { ($_.IsInherited -eq $False) -and -not ($_.User -like “NT AUTHORITY\SELF”) } |Select Identity, user, AccessRights | Out-String
+					write-host
+					write-host ---------------------------------------------------------
+					# END of A Selection 
+						}
+				}
+				if ($decision -eq "B")
+				{
+					# Section 1: information 
+					write-host  -ForegroundColor white		'information '
+					write-host  -ForegroundColor white		---------------------------------------------------------------------------- 
+					write-host  -ForegroundColor white  	'The following option will Assign FULL Access Permissions for a specific Mailbox.'
+					write-host  -ForegroundColor white  	'The option of AutoMapping will be disbaled.'
+					write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+					write-host  -ForegroundColor white  	'The PowerShell command that we use is: '
+					write-host  -ForegroundColor Yellow  	'Add-MailboxPermission <Identity> -User <Identity> -AccessRights FullAccess -InheritanceType all -Automapping $False'
+					write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+					write-host
+					write-host		
+					# Section 2: user input	
+					write-host -ForegroundColor white	'User input '
+					write-host -ForegroundColor white	---------------------------------------------------------------------------- 
+					write-host -ForegroundColor Yellow	"You will need to provide 2 parameters:"  
+					write-host
+					write-host -ForegroundColor Yellow	"1. Identity of the user that you want to assign Full access permission to his mailbox  "  
+					write-host -ForegroundColor Yellow	"NOTE - You can use the user Alias as Identity or the user Email address "
+					write-host -ForegroundColor Yellow	"For example:  gomesd@domain.co.uk ( Manager Mailbox )"
+					write-host
+					$MailBox  = Read-Host "Type the Mailbox name of user that you want to assign Full Access permission "
+					write-host
+					write-host
+					write-host -ForegroundColor Yellow	"2. Mailbox name of user that you will be assigned with Full access permission   "  
+					write-host -ForegroundColor Yellow	"For example:  bob@domain.co.uk ( Assistant )"
+					write-host -ForegroundColor Yellow	"NOTE: You can enter multiple addresses and separate with Commas"
+					write-host -ForegroundColor Yellow	"For example:  bob@domain.co.uk,dylan@domain.co.uk )"
+					write-host
+					$AliasArray  = Read-Host "Type the Mailbox name of user that you want to assign Full Access permission to $MailBox Mailbox"
+					write-host
+							ForEach($Email in $AliasArray.split(","))
+							{
+					# Section 3: PowerShell Command
+					Add-MailboxPermission $MailBox -User $Email -AccessRights FullAccess -InheritanceType all -Automapping $False
+					# Section 4:  Indication 
+					write-host
+					write-host 
+								if ($lastexitcode -eq 1)
+								{
+									write-host "The command Failed :-(" -ForegroundColor red
+								}
+								else
+								{
+									write-host -------------------------------------------------------------
+									write-host -ForegroundColor Yellow	"The command complete successfully !" 
+									write-host -ForegroundColor Yellow	"The following User"
+									write-host -ForegroundColor Magenta	$AliasArray.ToUpper() 
+									write-host -ForegroundColor Yellow	"Have FULL ACCESS Permissions on "	
+									write-host -ForegroundColor Magenta	$MailBox.ToUpper()
+									write-host -ForegroundColor Yellow	"Mailbox" 
+									write-host -------------------------------------------------------------
+								}
+					#———— End of Indication ———————
+					#Section 3: Display Information
+					write-host ---------------------------------------------------------
+					write-host -ForegroundColor Yellow List of User that have FULL ACCESS permissions for $MailBox MailBox 
+					write-host ---------------------------------------------------------
+					Get-mailboxpermission $MailBox | Where { ($_.IsInherited -eq $False) -and -not ($_.User -like “NT AUTHORITY\SELF”) } |Select Identity, user, AccessRights | Out-String
+					write-host
+					write-host ---------------------------------------------------------
+					# END of A Selection 
+						}
+					# END of B Selection 
+				}
+				else
+					{
+					  Write-Host "Choose the required option by entering the letter of your choice"
+					}
+				#Section 5: End the Command
+				write-host
+				write-host
+				Read-Host "Press Enter to continue..."
+				write-host
+				write-host
+		}
+		2
+		{
+			#####################################################################
+			#Assign "SEND AS" Permissions for a Mailbox
+			#####################################################################
+			# Section 1: information 
+				clear-host
+				write-host
+				write-host
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                            
+				write-host  -ForegroundColor white		Introduction                                                                                          
+				write-host  -ForegroundColor white		--------------------------------------------------------------------------------------                                                              
+				write-host  -ForegroundColor white  	'In the following section we will: '
+				write-host  -ForegroundColor white  	'Assign SEND AS Permissions for a specific Mailbox.'
+				write-host  -ForegroundColor white  	'For example: Assign permission to assistant "(User B)" that needs permission to'   
+				write-host  -ForegroundColor white  	'SEND AS email by using the manager name "(User A)" .'
+				write-host  -ForegroundColor white  	'The first Variable is the Mailbox name for which we wish to give permission. '
+				write-host  -ForegroundColor white  	'The second Variable is the User That will get the SEND AS permission .'
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                          
+				write-host
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host  -ForegroundColor white  	'The PowerShell command that we use is: '
+				write-host  -ForegroundColor Yellow  	'Add-RecipientPermission <Identity> -Trustee <Identity> -AccessRights SendAs -Confirm:$False'
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host
+				write-host
+			# Section 2: user input	
+					write-host -ForegroundColor white	'User input '
+					write-host -ForegroundColor white	---------------------------------------------------------------------------- 
+					write-host -ForegroundColor Yellow	"You will need to provide 2 parameters:"  
+					write-host
+					write-host -ForegroundColor Yellow	"1. Identity (Alias or Email address) name of user that you want to assign SEND AS permission to his mailbox  "  
+					write-host -ForegroundColor Yellow	"For example:  gomesd@domain.co.uk ( Manager Mailbox )"
+					write-host
+					$MailBox  = Read-Host "Type the Identity (Alias or Email address) name of user that you want to assign SEND AS permission to his mailbox "
+					write-host
+					write-host
+					write-host -ForegroundColor Yellow	"2. Identity (Alias or Email address) name of user that you will be assigned with SEND AS permission   "  
+					write-host -ForegroundColor Yellow	"For example:  bob@domain.co.uk ( Assistant )"
+					write-host -ForegroundColor Yellow	"NOTE: You can enter multiple addresses and separate with Commas"
+					write-host
+					$AliasArray  = Read-Host "Type the Identity (Alias or Email address) of user that you want to assign to him SEND AS permission to $MailBox Mailbox "
+					write-host
+					ForEach($Email in $AliasArray.split(","))
+							{	
+			# Section 3: PowerShell Command
+					Add-RecipientPermission $MailBox -Trustee $Email -AccessRights SendAs -Confirm:$False
+			# Section 4:  Indication 
+					write-host
+					write-host 
+								if ($lastexitcode -eq 1)
+								{
+									write-host "The command Failed :-(" -ForegroundColor red
+								}
+								else
+								{
+									write-host -------------------------------------------------------------
+									write-host -ForegroundColor Yellow	"The command complete successfully !" 
+									write-host -ForegroundColor Yellow	"The following User"
+									write-host -ForegroundColor Magenta	$AliasArray.ToUpper() 
+									write-host -ForegroundColor Yellow	"Have SEND AS Permissions on "	
+									write-host -ForegroundColor Magenta	$MailBox.ToUpper()
+									write-host -ForegroundColor Yellow	"Mailbox" 
+									write-host -------------------------------------------------------------
+								}
+					#———— End of Indication ———————
+					#Section 3: Display Information
+					write-host ---------------------------------------------------------
+					write-host -ForegroundColor Yellow List of User that have SEND AS permissions for $MailBox MailBox 
+					write-host ---------------------------------------------------------
+					Get-RecipientPermission  $MailBox | Where { ($_.IsInherited -eq $False) -and -not ($_.Trustee -like “NT AUTHORITY\SELF”) } | Select Trustee, AccessControlType, AccessRights | Out-String
+					write-host
+					write-host ---------------------------------------------------------
+					# END of menu 2
+				}
+		}
+		3
+		{
+			#####################################################################
+			#Assign "SEND ON BEHALF" Permissions for a Mailbox
+			#####################################################################
+			# Section 1: information 
+				clear-host
+				write-host
+				write-host
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                            
+				write-host  -ForegroundColor white		Introduction                                                                                          
+				write-host  -ForegroundColor white		--------------------------------------------------------------------------------------                                                              
+				write-host  -ForegroundColor white  	'In the following section we will: '
+				write-host  -ForegroundColor white  	'Assign SEND ON BEHALF Permissions for a specific Mailbox.'
+				write-host  -ForegroundColor white  	'For example: Assign permission to assistant "(User B)" that needs permission to'   
+				write-host  -ForegroundColor white  	'SEND ON BEHALF email by using the manager name "(User A)" .'
+				write-host  -ForegroundColor white  	'The first Variable is the Mailbox name for which we wish to give permission. '
+				write-host  -ForegroundColor white  	'The second Variable is the User That will get the SEND ON BEHALF permission .'
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                          
+				write-host
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host  -ForegroundColor white  	'The PowerShell command that we use is: '
+				write-host  -ForegroundColor Yellow  	'Get-Mailbox <Identity> -GrantSendOnBehalfTo <Identity>'
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host
+				write-host
+			# Section 2: user input						
+					write-host -ForegroundColor white	'User input '
+					write-host -ForegroundColor white	---------------------------------------------------------------------------- 
+					write-host -ForegroundColor Yellow	"You will need to provide 2 parameters:"  
+					write-host
+					write-host -ForegroundColor Yellow	"1. Identity (Alias or Email address) name of user that you want to assign SEND ON BEHALF permission to his mailbox  "  
+					write-host -ForegroundColor Yellow	"For example:  gomesd@domain.co.uk ( Manager Mailbox )"
+					write-host
+					$MailBox  = Read-Host "Type the Identity (Alias or Email address) name of user that you want to assign SEND ON BEHALF permission to his mailbox "
+					write-host
+					write-host
+					write-host -ForegroundColor Yellow	"2. Identity (Alias or Email address) name of user that you will be assigned with SEND ON BEHALF permission   "  
+					write-host -ForegroundColor Yellow	"For example:  bob@domain.co.uk ( Assistant )"
+					write-host -ForegroundColor Yellow	"NOTE: You can enter multiple addresses and separate with Commas"
+					write-host -ForegroundColor Yellow	"For example:  bob@domain.co.uk,dylan@domain.co.uk )"
+					write-host
+					$AliasArray  = Read-Host "Type the Identity (Alias or Email address) of user that you want to assign to him SEND ON BEHALF permission to $MailBox Mailbox"
+					write-host	
+					ForEach($Email in $AliasArray.split(","))
+							{						
+			# Section 3: PowerShell Command
+					Set-Mailbox $MailBox -GrantSendOnBehalfTo $Email
+			# Section 4:  Indication 
+					write-host
+					write-host 
+								if ($lastexitcode -eq 1)
+								{
+									write-host "The command Failed :-(" -ForegroundColor red
+								}
+								else
+								{
+									write-host -------------------------------------------------------------
+									write-host -ForegroundColor Yellow	"The command complete successfully !" 
+									write-host -ForegroundColor Yellow	"The following User"
+									write-host -ForegroundColor Magenta	$AliasArray.ToUpper() 
+									write-host -ForegroundColor Yellow	"Have SEND ON BEHALF Permissions on "	
+									write-host -ForegroundColor Magenta	$MailBox.ToUpper()
+									write-host -ForegroundColor Yellow	"Mailbox" 
+									write-host -------------------------------------------------------------
+								}
+					#———— End of Indication ———————
+					#Section 3: Display Information
+					write-host ---------------------------------------------------------
+					write-host -ForegroundColor Yellow List of User that have SEND ON BEHALF permissions for $MailBox MailBox 
+					write-host ---------------------------------------------------------
+					Get-Mailbox $MailBox | fl displayname,GrantSendOnBehalfTo | Out-String
+					write-host
+					write-host ---------------------------------------------------------
+					# END of menu 2
+				}
+		}
+		4
+		{
+			#####################################################################
+			#Assign "FULL ACCESS + SEND AS" Permissions for a Mailbox
+			#####################################################################
+			# Section 1: information 
+				clear-host
+				write-host
+				write-host
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                            
+				write-host  -ForegroundColor white		Introduction                                                                                          
+				write-host  -ForegroundColor white		--------------------------------------------------------------------------------------                                                              
+				write-host  -ForegroundColor white  	'In the following section we will: '
+				write-host  -ForegroundColor white  	'AAssign "FULL ACCESS + SEND AS" Permissions for a specific Mailbox.'
+				write-host  -ForegroundColor white  	'For example: Assign permission to assistant "(User B)" that needs '   
+				write-host  -ForegroundColor white  	'FULL ACCESS + SEND AS permissions to her manager"(User A)" .'
+				write-host  -ForegroundColor white  	'The first Variable is the Mailbox name for which we wish to give permission. '
+				write-host  -ForegroundColor white  	'The second Variable is the User That will get the SFULL ACCESS + SEND AS permission .'
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                          
+				write-host
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host  -ForegroundColor white  	'The PowerShell command that we use is: '
+				write-host  -ForegroundColor Yellow  	'Add-RecipientPermission <Identity> -Trustee <Identity> -AccessRights SendAs -Confirm:$fals'
+				write-host  -ForegroundColor Yellow  	'Add-MailboxPermission <Identity> -User <Identity> -AccessRights FullAccess -InheritanceType all'
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host
+				write-host
+			# Section 2: user input	
+					write-host -ForegroundColor white	'User input '
+					write-host -ForegroundColor white	---------------------------------------------------------------------------- 
+					write-host -ForegroundColor Yellow	"You will need to provide 2 parameters:"  
+					write-host
+					write-host -ForegroundColor Yellow	"1. Identity (Alias or Email address) name of user that you want to assign FULL ACCESS + SEND AS permission to his mailbox  "  
+					write-host -ForegroundColor Yellow	"For example:  gomesd@domain.co.uk ( Manager Mailbox )"
+					write-host
+					$MailBox  = Read-Host "Type the Identity (Alias or Email address) name of user that you want to assign FULL ACCESS + SEND AS permission to his mailbox "
+					write-host
+					write-host
+					write-host -ForegroundColor Yellow	"2. Identity (Alias or Email address) name of user that you will be assigned with FULL ACCESS + SEND AS permission   "  
+					write-host -ForegroundColor Yellow	"For example:  bob@domain.co.uk ( Assistant )"
+					write-host -ForegroundColor Yellow	"NOTE: You can enter multiple addresses and separate with Commas"
+					write-host -ForegroundColor Yellow	"For example:  bob@domain.co.uk,dylan@domain.co.uk )"
+					write-host
+					$AliasArray  = Read-Host "Type the Identity (Alias or Email address) of user that you want to assign to him FULL ACCESS + SEND AS permission to $MailBox Mailbox"
+					write-host	
+					ForEach($Email in $AliasArray.split(","))
+							{					
+			# Section 3: PowerShell Command
+					Add-MailboxPermission $MailBox -User $Email -AccessRights FullAccess -InheritanceType all
+					Add-RecipientPermission $MailBox -Trustee $Email -AccessRights SendAs -Confirm:$False					
+			# Section 4:  Indication 
+					write-host
+					write-host 
+								if ($lastexitcode -eq 1)
+								{
+									write-host "The command Failed :-(" -ForegroundColor red
+								}
+								else
+								{
+									write-host -------------------------------------------------------------
+									write-host -ForegroundColor Yellow	"The command complete successfully !" 
+									write-host -ForegroundColor Yellow	"The following User"
+									write-host -ForegroundColor Magenta	$AliasArray.ToUpper() 
+									write-host -ForegroundColor Yellow	"Have SEND ON BEHALF Permissions on "	
+									write-host -ForegroundColor Magenta	$MailBox.ToUpper()
+									write-host -ForegroundColor Yellow	"Mailbox" 
+									write-host -------------------------------------------------------------								
+								}
+					#———— End of Indication ———————
+					#Section 3: Display Information
+					write-host ---------------------------------------------------------
+					write-host -ForegroundColor Yellow List of User that have SEND ON BEHALF permissions for $MailBox MailBox 
+					write-host ---------------------------------------------------------
+					Get-Mailbox $MailBox | fl displayname,GrantSendOnBehalfTo | Out-String
+					write-host
+					write-host ---------------------------------------------------------
+					# END of menu 2
+				}
+		}
+		5
+		{
+			#####################################################################
+			#Assign "FULL ACCESS" Permissions to Distribution Group + AutoMapping
+			#####################################################################
+			# Section 1: information 
+				clear-host
+				write-host
+				write-host
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                            
+				write-host  -ForegroundColor white		Introduction                                                                                          
+				write-host  -ForegroundColor white		--------------------------------------------------------------------------------------                                                              
+				write-host  -ForegroundColor white  	'In the following section we will: '
+				write-host  -ForegroundColor white  	'Assign "FULL ACCESS" Permissions to Distribution Group + Automapping'
+				write-host  -ForegroundColor white  	'For example: Assign permission to assistant "(User B)" that needs permission to'   
+				write-host  -ForegroundColor white  	'SEND ON BEHALF email by using the manager name "(User A)" .'
+				write-host  -ForegroundColor white  	'The first Variable is the Mailbox name for which we wish to give permission. '
+				write-host  -ForegroundColor white  	'The second Variable is the User That will get the SEND ON BEHALF permission .'
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                          
+				write-host
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host  -ForegroundColor white  	'The PowerShell command that we use is: '
+				write-host  -ForegroundColor Yellow  	'$DL = Get-distributiongroupmember $DLNAME | Select-Object -ExpandProperty Name'
+				write-host  -ForegroundColor Yellow  	'ForEach ($Member in $DL ) {'
+				write-host  -ForegroundColor Yellow  	'Add-MailboxPermission -Identity $MailBox -User $S -AccessRights ‘FullAccess’ -InheritanceType all '
+				write-host  -ForegroundColor Yellow  	'}'
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host
+				write-host									
+			# Section 2: user input						
+					write-host -ForegroundColor white	'User input '
+					write-host -ForegroundColor white	---------------------------------------------------------------------------- 
+					write-host -ForegroundColor Yellow	"You will need to provide 2 parameters:"  
+					write-host
+					write-host -ForegroundColor Yellow	"1. Identity (Alias or Email address) name of user that you want to assign FULL ACCESS permission to his mailbox  "  
+					write-host -ForegroundColor Yellow	"For example:  gomesd@domain.co.uk ( Manager Mailbox )"
+					write-host
+					$MailBox  = Read-Host "Type the Identity (Alias or Email address) name of Distribution Group that you want to assign SEND ON BEHALF permission to his mailbox "
+					write-host
+					write-host
+					write-host -ForegroundColor Yellow	"2. Identity (Alias or Email address) name of Distribution Group that you will be assigned with FULL ACCESS permission   "  
+					write-host -ForegroundColor Yellow	"For example:  USA-DL@o365info.com ( Assistant )"
+					write-host
+					$DLNAME   = Read-Host "Type the Identity (Alias or Email address) of user that you want to Distribution Group that you will be assigned with FULL ACCESS permission to $MailBox Mailbox"
+					write-host
+			# Section 3: PowerShell Command
+					$DL = Get-distributiongroupmember $DLNAME | Select-Object -ExpandProperty Name	 
+					ForEach ($Member in $DL ) 
+					{
+					Add-MailboxPermission $MailBox -User $Member -AccessRights ‘FullAccess’ -InheritanceType all 
+					}					
+			# Section 4:  Indication 
+					write-host
+					write-host 
+								if ($lastexitcode -eq 1)
+								{
+									write-host "The command Failed :-(" -ForegroundColor red
+								}
+								else
+								{
+									write-host -------------------------------------------------------------
+									write-host -ForegroundColor Yellow	"The command complete successfully !" 
+									write-host -ForegroundColor Yellow	"$Member is a member of the distribution group $DLNAME has been given FULL ACCESS permission to $MailBox mailbox"
+									write-host -------------------------------------------------------------
+								}
+					#———— End of Indication ———————
+					#Section 3: Display Information
+					# END of menu 2
+		}
+		#+++++++++++++++++++++++++++++++++++++++++++++++++
+		# Section B: Assign Permissions BULK Mode
+		#+++++++++++++++++++++++++++++++++++++++++++++++++	
+		6
+		{
+			#####################################################################
+			# Assign "FULL ACCESS" Permissions for all Mailboxes - no AutoMap (BULK Mode)
+			#####################################################################
+			# Section 1: information 
+				clear-host
+				write-host
+				write-host
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                            
+				write-host  -ForegroundColor white		Introduction                                                                                          
+				write-host  -ForegroundColor white		--------------------------------------------------------------------------------------                                                              
+				write-host  -ForegroundColor white  	'This option will:'  
+				write-host  -ForegroundColor white  	'Assign FULL ACCESS Permissions to User'  
+				write-host  -ForegroundColor white  	'For a ALL Office 365 MailBoxs ! '
+				write-host  -ForegroundColor white  	'For example: Assign permission to Administrator that needs permission to '  
+				write-host  -ForegroundColor white  	'ALL Office 365  Mailboxs. '
+				write-host  -ForegroundColor white  	'In addition we will prevent the option of AutoMap'
+				write-host  -ForegroundColor white  	'because the basic assumption is that we dont want to add the entire mailbox to the administrator mail profile'
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                          
+				write-host
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host  -ForegroundColor white  	'The PowerShell command that we use is: '
+				write-host  -ForegroundColor Yellow  	'Get-Mailbox -ResultSize unlimited -Filter {RecipientTypeDetails -eq 'UserMailbox'} | Add-Mailboxpermission -User <Identity> -AccessRights fullaccess -InheritanceType all -Automapping $False'
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host
+				write-host
+			# Section 2: user input		
+					write-host -ForegroundColor white	'User input '
+					write-host -ForegroundColor white	---------------------------------------------------------------------------- 
+					write-host -ForegroundColor Yellow	"You will need to provide 1 parameters:"  
+					write-host
+					write-host -ForegroundColor Yellow	"1. Identity (Alias or Email address) name of user that you want to assign FULL ACCESS permission to ALL Office 365 MailBoxs  "  
+					write-host -ForegroundColor Yellow	"For example:  gomesd@domain.co.uk ( Administrator )"
+					write-host
+					$MailBox  = Read-Host "Type the Identity (Alias or Email address) name of user that you want to assign FULL ACCESS permission to ALL Office 365 MailBoxs "
+					write-host
+					write-host
+			# Section 3: PowerShell Command
+					Get-Mailbox -ResultSize unlimited -Filter {RecipientTypeDetails -eq 'UserMailbox'} | Add-Mailboxpermission -User $MailBox -AccessRights fullaccess -InheritanceType all -Automapping $False
+			# Section 4:  Indication 
+					write-host
+					write-host 
+								if ($lastexitcode -eq 1)
+								{
+									write-host "The command Failed :-(" -ForegroundColor red
+								}
+								else
+								{
+									write-host -------------------------------------------------------------
+									write-host -ForegroundColor Yellow	"The command complete successfully !" 
+									write-host -ForegroundColor Yellow	"The following User"
+									write-host -ForegroundColor Magenta	$MailBox.ToUpper() 
+									write-host -ForegroundColor Yellow	"Have FULL ACCESS Permissions on ALL Office 365 MailBoxs "	
+									write-host -------------------------------------------------------------									
+								}
+					#———— End of Indication ———————
+					#Section 3: Display Information
+					# END of menu 6
+		}
+		#+++++++++++++++++++++++++++++++++++++++++++++++++
+		# Section C: Display Permissions
+		#+++++++++++++++++++++++++++++++++++++++++++++++++	
+		8
+		{
+			#####################################################################
+			# Display  "FULL ACCESS + SEND AS" Permissions for Mailbox
+			#####################################################################
+			# Section 1: information 
+				clear-host
+				write-host
+				write-host
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                            
+				write-host  -ForegroundColor white		Introduction                                                                                          
+				write-host  -ForegroundColor white		--------------------------------------------------------------------------------------                                                              
+				write-host  -ForegroundColor white  	'This option will:'  
+				write-host  -ForegroundColor white  	'Display  "FULL ACCESS" Permissions for Mailbox'  
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                          
+				write-host
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host  -ForegroundColor white  	'The PowerShell command that we use is: '
+				write-host  -ForegroundColor Yellow  	'Get-Mailboxpermission <Identity> | Where { ($_.IsInherited -eq $False) -and -not ($_.User -like “NT AUTHORITY\SELF”) } | Select Identity, user, AccessRights'
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host
+				write-host								
+			# Section 2: user input						
+					write-host -ForegroundColor white	'User input '
+					write-host -ForegroundColor white	---------------------------------------------------------------------------- 
+					write-host -ForegroundColor Yellow	"You will need to provide 1 parameters:"  
+					write-host
+					write-host -ForegroundColor Yellow	"1. Identity (Alias or Email address) name of user that you want to display which users have FULL ACCESS  "  
+					write-host -ForegroundColor Yellow	"For example:  gomesd@domain.co.uk "
+					write-host -ForegroundColor Yellow	"For example:  gomesd "					
+					write-host
+					$MailBox  = Read-Host "Type the Identity (Alias or Email address) name of user that you want to display which are the users that have FULL ACCESS "
+					write-host
+					write-host
+			# Section 3: PowerShell Command +Display Information
+					write-host ------------------------------------------------------------------------
+					write-host -ForegroundColor white  -BackgroundColor Blue	"List of Users That have FULL ACCESS permissions for $MailBox MailBox " 
+					write-host ------------------------------------------------------------------------
+					write-host 
+							   Get-Mailboxpermission $MailBox | Where { ($_.IsInherited -eq $False) -and -not ($_.User -like “NT AUTHORITY\SELF”) } | Select Identity, user, AccessRights  | Out-String
+					write-host 	
+					write-host ------------------------------------------------------------------------
+					write-host
+					write-host
+			#Section 4: End the Command
+					write-host
+					write-host
+					Read-Host "Press Enter to continue..."
+					write-host
+					write-host
+			# END of menu 6
+		}
+		#+++++++++++++++++++++++++++++++++++++++++++++++++
+		# Section E: Revoke Permissions
+		#+++++++++++++++++++++++++++++++++++++++++++++++++	
+		11
+		{
+			#####################################################################
+			#Revoke "FULL ACCESS" Permissions
+			#####################################################################
+			# Section 1: information 
+				clear-host
+				write-host
+				write-host
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                            
+				write-host  -ForegroundColor white		Introduction                                                                                          
+				write-host  -ForegroundColor white		--------------------------------------------------------------------------------------                                                              
+				write-host  -ForegroundColor white  	'This option will:'  
+				write-host  -ForegroundColor white  	'Remove FULL ACCESS Permissions to User(or Distribution Group)'
+				write-host  -ForegroundColor white  	'For a specific MailBox '
+				write-host  -ForegroundColor white  	'For example: remove permission to assistant "(User B)" that have permission to'   
+				write-host  -ForegroundColor white  	'Access the manager Mailbox "(user A)" .'
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                          
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host  -ForegroundColor white  	'The PowerShell command that we use is: '
+				write-host  -ForegroundColor Yellow  	'Remove-MailboxPermission  <Identity> -User <Identity> -AccessRights FullAccess -Confirm:$False'
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host
+				write-host
+			# Section 2: user input	
+					write-host -ForegroundColor white	'User input '
+					write-host -ForegroundColor white	---------------------------------------------------------------------------- 
+					write-host -ForegroundColor Yellow	"You will need to provide 2 parameters:"  
+					write-host
+					write-host -ForegroundColor Yellow	"1. Identity (Alias or Email address)   "  
+					write-host -ForegroundColor Yellow	"name of user that you want to Remove FULL ACCESS Permissions from his mailbox"
+					write-host -ForegroundColor Yellow	"For example:  gomesd@domain.co.uk ( Administrator )"
+					write-host
+					$MailBox  = Read-Host "Type the Identity (Alias or Email address) name of user that you want to Remove FULL ACCESS Permissions from his mailbox "
+					write-host
+					write-host
+					write-host ------------------------------------------------------------------------
+					write-host -ForegroundColor white  -BackgroundColor Blue	"List of Users That have FULL ACCESS permissions for $MailBox MailBox " 
+					write-host ------------------------------------------------------------------------
+					write-host 
+							   Get-Mailboxpermission $MailBox | Where { ($_.IsInherited -eq $False) -and -not ($_.User -like “NT AUTHORITY\SELF”) } |Select Identity, user, AccessRights | Out-String
+					write-host 	
+					write-host ------------------------------------------------------------------------
+					write-host
+					write-host
+					write-host -ForegroundColor Yellow	"2. Identity (Alias or Email address) name of user that you will be Remove FULL ACCESS  permission   "  
+					write-host -ForegroundColor Yellow	"For example:  bob@domain.co.uk ( Assistant )"
+					write-host -ForegroundColor Yellow	"NOTE: You can enter multiple addresses and separate with Commas"
+					write-host -ForegroundColor Yellow	"For example:  bob@domain.co.uk,dylan@domain.co.uk )"
+					write-host
+					$AliasArray  = Read-Host "Type the Identity (Alias or Email address) of user that you want to Remove the FULL ACCESS permission to $MailBox Mailbox"
+					write-host					
+					ForEach($Email in $AliasArray.split(","))
+							{										
+			# Section 3: PowerShell Command
+					Remove-MailboxPermission $MailBox -User $Email -AccessRights FullAccess -Confirm:$False
+					write-host ------------------------------------------------------------------------
+					write-host -ForegroundColor white  -BackgroundColor Blue	"List of Users That have FULL ACCESS permissions for $MailBox MailBox AFTER the removal " 
+					write-host ------------------------------------------------------------------------
+					write-host 
+							   Get-Mailboxpermission $MailBox | Where { ($_.IsInherited -eq $False) -and -not ($_.User -like “NT AUTHORITY\SELF”) } |Select Identity, user, AccessRights | Out-String
+					write-host 	
+					write-host ------------------------------------------------------------------------
+					write-host
+					write-host					
+			# Section 4:  Indication 
+					write-host
+					write-host 
+								if ($lastexitcode -eq 1)
+								{
+									write-host "The command Failed :-(" -ForegroundColor red
+								}
+								else
+								{
+									write-host -------------------------------------------------------------
+									write-host -ForegroundColor Yellow	"The command complete successfully !" 
+									write-host -ForegroundColor Yellow	"The following User"
+									write-host -ForegroundColor Magenta	$AliasArray.ToUpper() 
+									write-host -ForegroundColor Yellow	"Full Access Permissions on "	
+									write-host -ForegroundColor Magenta	$MailBox.ToUpper()
+									write-host -ForegroundColor Yellow	"was removed" 
+									write-host -------------------------------------------------------------									
+								}
+					#———— End of Indication ———————
+					#Section 3: Display Information
+				}		
+				#Section 5: End the Command
+					write-host
+					write-host
+					Read-Host "Press Enter to continue..."
+					write-host
+					write-host
+				# END of menu 11
+		}		
+		12
+		{
+			#####################################################################
+			#Revoke "Send as " Permissions
+			#####################################################################
+			# Section 1: information 
+				clear-host
+				write-host
+				write-host
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                            
+				write-host  -ForegroundColor white		Introduction                                                                                          
+				write-host  -ForegroundColor white		--------------------------------------------------------------------------------------                                                              
+				write-host  -ForegroundColor white  	'This option will:'  
+				write-host  -ForegroundColor white  	'Remove Send as Permissions to User(or Distribution Group)'
+				write-host  -ForegroundColor white  	'For a specific MailBox '
+				write-host  -ForegroundColor white  	'For example: remove permission to assistant "(User B)" that have permission to'   
+				write-host  -ForegroundColor white  	'Access the manager Mailbox "(user A)" .'
+				write-host  -ForegroundColor Magenta	oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo                                          
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host  -ForegroundColor white  	'The PowerShell command that we use is: '
+				write-host  -ForegroundColor Yellow  	'Remove-RecipientPermission <Identity> -AccessRights SendAs -Trustee <Identity> -Confirm:$False'
+				write-host  -ForegroundColor white		----------------------------------------------------------------------------  
+				write-host
+				write-host	
+			# Section 2: user input					
+					write-host -ForegroundColor white	'User input '
+					write-host -ForegroundColor white	---------------------------------------------------------------------------- 
+					write-host -ForegroundColor Yellow	"You will need to provide 2 parameters:"  
+					write-host
+					write-host -ForegroundColor Yellow	"1. Identity (Alias or Email address)   "  
+					write-host -ForegroundColor Yellow	"name of user that you want to Remove FULL ACCESS Permissions from his mailbox"
+					write-host -ForegroundColor Yellow	"For example:  gomesd@domain.co.uk ( Administrator )"
+					write-host
+					$MailBox  = Read-Host "Type the Identity (Alias or Email address) name of user that you want to Remove FULL ACCESS Permissions from his mailbox "
+					write-host
+					write-host
+					write-host ------------------------------------------------------------------------
+					write-host -ForegroundColor white  -BackgroundColor Blue	"List of Users That have FULL ACCESS permissions for $MailBox MailBox " 
+					write-host ------------------------------------------------------------------------
+					write-host 
+							   Get-Mailboxpermission $MailBox | Where { ($_.IsInherited -eq $False) -and -not ($_.User -like “NT AUTHORITY\SELF”) } |Select Identity, user, AccessRights | Out-String
+					write-host 	
+					write-host ------------------------------------------------------------------------
+					write-host
+					write-host
+					write-host -ForegroundColor Yellow	"2. Identity (Alias or Email address) name of user that you will be Remove FULL ACCESS  permission   "  
+					write-host -ForegroundColor Yellow	"For example:  bob@domain.co.uk ( Assistant )"
+					write-host -ForegroundColor Yellow	"NOTE: You can enter multiple addresses and separate with Commas"
+					write-host -ForegroundColor Yellow	"For example:  bob@domain.co.uk,dylan@domain.co.uk )"
+					write-host
+					$AliasArray  = Read-Host "Type the Identity (Alias or Email address) of user that you want to Remove the FULL ACCESS permission to $MailBox Mailbox"
+					write-host					
+					ForEach($Email in $AliasArray.split(","))
+							{										
+					# Section 3: PowerShell Command
+					Remove-RecipientPermission $MailBox -AccessRights SendAs -Trustee $Email -Confirm:$False			
+					write-host 
+					write-host ---------------------------------------------------------------------------------------------
+					write-host List of User and Distribution Groups that have SEND AS permissions for $MailBox MailBox -ForegroundColor Yellow
+					write-host ---------------------------------------------------------------------------------------------
+					Get-RecipientPermission -Identity $MailBox | where { ($_.IsInherited -eq $false) -and -not ($_.Trustee -like “NT AUTHORITY\SELF”) } | Select Trustee, AccessControlType, AccessRights | Out-String
+					write-host ---------------------------------------------------------------------------------------------										
+					# Section 4:  Indication 
+					write-host
+					write-host 
+								if ($lastexitcode -eq 1)
+								{
+									write-host "The command Failed :-(" -ForegroundColor red
+								}
+								else
+								{
+									write-host -------------------------------------------------------------
+									write-host -ForegroundColor Yellow	"The command complete successfully !" 
+									write-host -ForegroundColor Yellow	"The following User"
+									write-host -ForegroundColor Magenta	$AliasArray.ToUpper() 
+									write-host -ForegroundColor Yellow	"Full Access Permissions on "	
+									write-host -ForegroundColor Magenta	$MailBox.ToUpper()
+									write-host -ForegroundColor Yellow	"was removed" 
+									write-host -------------------------------------------------------------									
+								}
+					#———— End of Indication ———————
+					#Section 3: Display Information	
+				}				
+				#Section 5: End the Command
+					write-host
+					write-host
+					Read-Host "Press Enter to continue..."
+					write-host
+					write-host				
+					# END of menu 
+		}				 
+				#+++++++++++++++++++
+				# Step -05 Finish  
+				##++++++++++++++++++			 
+				13{
+				##########################################
+				# Disconnect PowerShell session  
+				##########################################
+				write-host -ForegroundColor Yellow Choosing this option will Disconnect the current PowerShell session 
+				Function Disconnect-ExchangeOnline {Get-PSSession | Where-Object {$_.ConfigurationName -eq "Microsoft.Exchange"} | Remove-PSSession}
+				Disconnect-ExchangeOnline -confirm
+				write-host
+				write-host
+				#———— Indication ———————
+				if ($lastexitcode -eq 0)
+				{
+					write-host -------------------------------------------------------------
+					write-host "The command complete successfully !" -ForegroundColor Yellow
+					write-host "The PowerShell session is disconnected" -ForegroundColor Yellow
+					write-host -------------------------------------------------------------
+				}
+				else
+				{
+					write-host "The command Failed :-(" -ForegroundColor red					
+				}
+				#———— End of Indication ———————
+				}
+				14{
+				##########################################
+				# Exit  
+				##########################################
+				$Loop = $true
+				Exit
+				}
+				}
+				}
