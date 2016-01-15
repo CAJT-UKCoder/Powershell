@@ -1,0 +1,1 @@
+New-MailboxExportRequest -Mailbox user1 -FilePath \\server\pstexport\user1.pst
