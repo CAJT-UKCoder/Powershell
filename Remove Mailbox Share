@@ -1,0 +1,1 @@
+Remove-MailboxPermission -Identity "user1" -User "user2@DOMAIN.co.uk" -AccessRights Fullaccess -InheritanceType all
