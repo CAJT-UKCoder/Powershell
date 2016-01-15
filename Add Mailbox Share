@@ -1,0 +1,1 @@
+Add-MailboxPermission -Identity "User1" -User Jointmailbox1@DOMAIN.co.uk -AccessRights Fullaccess -InheritanceType all
