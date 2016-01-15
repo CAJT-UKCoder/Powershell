@@ -1,0 +1,1 @@
+Add-ADPermission "USER at DOMAIN" -User "DOMAIN\USER" -Extendedrights "Send As"
